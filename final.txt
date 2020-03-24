@@ -1,0 +1,890 @@
+#ifdef __APPLE__
+#include <GLUT/glut.h>
+#else
+#include <GL/glut.h>
+#endif
+#include <cmath>
+#include <stdlib.h>
+#include <math.h>
+#include<bits/stdc++.h>
+using namespace std;
+#include "RGBpixmap.cpp"
+RGBpixmap pix[10];
+#define PI 3.1416
+GLUquadricObj *qobj;
+static void cube();
+void Init();
+void box(float lngh, float width, float depth);
+static inline void set_material(GLfloat c[], GLfloat s[], GLfloat sh[])
+{
+    GLfloat a[4] = { c[0]*0.1f, c[1]*0.1f, c[2]*0.1f, c[3] };
+    glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, c);
+    glMaterialfv(GL_FRONT, GL_DIFFUSE, c);
+    glMaterialfv(GL_FRONT, GL_SPECULAR, s);
+    glMaterialfv(GL_FRONT, GL_SHININESS, sh);
+}
+
+static GLfloat jack_mat_color[] = { 0, 1,0, 1 };
+static GLfloat jack_mat_spec[] = { 1, 1, 1, 1 };
+static GLfloat jack_mat_shininess[] = { 120 };
+
+
+static GLfloat side_wall_mat_color[] = { 250.0f/255, 230.0f/255, 230.0f/255, 1 };
+static GLfloat side_wall_spec[] = { 1, 1, 1, 1 };
+static GLfloat side_wall_shininess[] = { 120 };
+
+
+static GLfloat floor_wall_mat_color[] = { 1, 0, 0, 1 };
+static GLfloat floor_wall_spec[] = { 1, 1, 1, 1 };
+static GLfloat floor_wall_shininess[] = { 120 };
+
+//gasket
+static GLfloat gasket_bg_mat_color[] = { 0, 0, 0, 1 };
+static GLfloat gasket_bg_mat_spec[] = { 0, 0, 0, 1 };
+static GLfloat gasket_bg_mat_shininess[] = { 120 };
+
+static GLfloat gasket_mat_color[] = { 0, 0, 1, 1 };
+static GLfloat gasket_mat_spec[] = { 1, 1, 1, 1 };
+static GLfloat gasket_mat_shininess[] = { 120 };
+
+static void _gasket_recursive(int level, GLdouble t, GLdouble b, GLdouble l, GLdouble r)
+{
+    if (level == 0)
+    {
+        glVertex3d((l+r)/2, t, 0.01);  /// top middle vertex
+        glVertex3d(l, b, 0.01);        /// bottom left vertex
+        glVertex3d(r, b, 0.01);        /// bottom right vertex
+        return;
+    }
+
+    GLdouble midX = (l+r)/2;
+    GLdouble midY = (t+b)/2;
+    /// top triangle
+    _gasket_recursive(level-1, t, midY, (l+midX)/2, (midX+r)/2);
+    /// left triangle
+    _gasket_recursive(level-1, midY, b, l, midX);
+    /// right triangle
+    _gasket_recursive(level-1, midY, b, midX, r);
+}
+
+static void gasket(int level)
+{
+    set_material(gasket_bg_mat_color, gasket_bg_mat_spec, gasket_bg_mat_shininess);
+    glBegin(GL_QUADS);
+    glNormal3f(0, 0, 1);
+    glVertex3f(-0.5, -0.5, 0);
+    glVertex3f(0.5, -0.5, 0);
+    glVertex3f(0.5, 0.5, 0);
+    glVertex3f(-0.5, 0.5, 0);
+    glEnd();
+
+    set_material(gasket_mat_color, gasket_mat_spec, gasket_mat_shininess);
+    glBegin(GL_TRIANGLES);
+    glNormal3f(0, 0, 1);
+    _gasket_recursive(level, 0.4, -0.4, -0.4, 0.4);
+    glEnd();
+}
+
+static void jack()
+{
+    set_material(jack_mat_color, jack_mat_spec, jack_mat_shininess);
+
+
+    glPushMatrix();
+    glTranslated(0, (4+10)*cos(45*PI/180.0), 0);
+    for (int i=0; i<3; i++)
+    {
+        glPushMatrix();
+        glRotated(i*120, 0, 1, 0);
+        glRotated(45, 1, 0, 0);
+        glScaled(1, 5, 1);
+        glutSolidSphere(2, 36, 50);
+        glPopMatrix();
+    }
+    for (int i=0; i<3; i++)
+    {
+        glPushMatrix();
+        glRotated(i*120, 0, 1, 0);
+        glRotated(45, 1, 0, 0);
+        glTranslated(0, 12, 0);
+        glutSolidSphere(2, 36, 36);
+        glPopMatrix();
+    }
+    for (int i=0; i<3; i++)
+    {
+        glPushMatrix();
+        glRotated(i*120, 0, 1, 0);
+        glRotated(45, 1, 0, 0);
+        glTranslated(0, -12, 0);
+        glutSolidSphere(2, 36, 36);
+        glPopMatrix();
+    }
+    glPopMatrix();
+}
+
+
+
+float lngh ;
+float width ;
+float depth ;
+int i;
+///lighr variable
+static GLfloat table_top_mat_color[] = { 1, 1, 0, 1 };
+static GLfloat table_mat_color[] = { 0, 1, 0, 1 };
+static GLfloat table_mat_spec[] = { 1, 1, 1, 1 };
+static GLfloat table_mat_shininess[] = { 120 };
+
+static GLfloat l0_ambient[] = { 0, 0, 0, 1 }; ///ambient RGBA intensity of the light
+static GLfloat l0_diffuse[] = { 1, 1, 1, 1 };  ///diffuse RGBA intensity of the light
+static GLfloat l0_specular[] = { 1, 1, 1, 1 }; ///the specular RGBA intensity of the light.
+static GLfloat l0_position[] = { 4, 15, 4, 1 };  ///specify the position of the light in homogeneous object coordinates.
+
+static GLfloat l1_ambient[] = { 0.05f, 0.05f, 0.05f, 1 };
+static GLfloat l1_diffuse[] = { 1, 1, 1, 1 };
+static GLfloat l1_specular[] = { 1, 1, 1, 1 };
+static GLfloat l1_position[] = { 20, 20, 20, 1 };
+
+static GLfloat l1_spot_dir[] = { -1, -1, -0.5}; ///The params parameter contains three floating-point values that specify the direction of the light in homogeneous object coordinates
+static GLfloat l1_spot_cutoff[] = { 10 };  ///The params parameter is a single floating-point value that specifies the maximum spread angle of a light source
+///light variable
+static void set_lights()
+{
+    glLightfv(GL_LIGHT0, GL_AMBIENT, l0_ambient);
+    glLightfv(GL_LIGHT0, GL_DIFFUSE, l0_diffuse);
+    glLightfv(GL_LIGHT0, GL_SPECULAR, l0_specular);
+    glLightfv(GL_LIGHT0, GL_POSITION, l0_position);
+
+    glLightf(GL_LIGHT0, GL_CONSTANT_ATTENUATION, 1);
+    glLightf(GL_LIGHT0, GL_LINEAR_ATTENUATION, 0);
+    glLightf(GL_LIGHT0, GL_QUADRATIC_ATTENUATION, 0.005);
+
+    /// const double t = glutGet(GLUT_ELAPSED_TIME) / 10.0;
+    const double t = 1750;
+    ///cout<<"time value is "<<t<<endl;
+
+    glLightfv(GL_LIGHT1, GL_AMBIENT, l1_ambient);
+    glLightfv(GL_LIGHT1, GL_DIFFUSE, l1_diffuse);
+    glLightfv(GL_LIGHT1, GL_SPECULAR, l1_specular);
+    glLightfv(GL_LIGHT1, GL_POSITION, l1_position);
+    // glPushMatrix();
+    glRotated(t*0.5, 1, 1, 1);
+    glLightfv(GL_LIGHT1, GL_SPOT_DIRECTION, l1_spot_dir);
+    // glPopMatrix();
+    glLightfv(GL_LIGHT1, GL_SPOT_CUTOFF, l1_spot_cutoff);
+    glLightf(GL_LIGHT1, GL_CONSTANT_ATTENUATION, 0.1);
+    glLightf(GL_LIGHT1, GL_LINEAR_ATTENUATION, 0);
+    glLightf(GL_LIGHT1, GL_QUADRATIC_ATTENUATION, 0.001f);
+}
+
+static void cube()
+{
+    glBegin(GL_QUADS);
+
+    glColor3f(0.3f,0.3f,0.3f);    // Color Blue
+    glVertex3f( 1.0f, 1.0f,-1.0f);    // Top Right Of The Quad (Top)
+    glVertex3f(-1.0f, 1.0f,-1.0f);    // Top Left Of The Quad (Top)
+    glVertex3f(-1, 1, 1);    // Bottom Left Of The Quad (Top)
+    glVertex3f( 1.0f, 1.0f, 1.0f);    // Bottom Right Of The Quad (Top)
+
+    glColor3f(0.0f,0.0f,1.0f);    // Color Red
+    glVertex3f( 1.0f,-1.0f, 1.0f);    // Top Right Of The Quad (Bottom)
+    glVertex3f(-1.0f,-1.0f, 1.0f);    // Top Left Of The Quad (Bottom)
+    glVertex3f(-1.0f,-1.0f,-1.0f);    // Bottom Left Of The Quad (Bottom)
+    glVertex3f( 1.0f,-1.0f,-1.0f);    // Bottom Right Of The Quad (Bottom)
+
+    glColor3f(1.0f,0.0f,0.0f);    // Color blue
+    glVertex3f( 1.0f, 1.0f, 1.0f);    // Top Right Of The Quad (Front)
+    glVertex3f(-1.0f, 1.0f, 1.0f);    // Top Left Of The Quad (Front)
+    glVertex3f(-1.0f,-1.0f, 1.0f);    // Bottom Left Of The Quad (Front)
+    glVertex3f( 1.0f,-1.0f, 1.0f);    // Bottom Right Of The Quad (Front)
+
+    glColor3f(1.0f,0.0f,0.0f);    // Color Yellow
+    glVertex3f( 1.0f,0.0f,1.0f);    // Top Right Of The Quad (Back)
+    glVertex3f(-1.0f,-1.0f,-1.0f);    // Top Left Of The Quad (Back)
+    glVertex3f(-1.0f, 1.0f,-1.0f);    // Bottom Left Of The Quad (Back)
+    glVertex3f( 1.0f, 1.0f,-1.0f);    // Bottom Right Of The Quad (Back)
+
+    glColor3f(0.0f,0.0f,1.0f);    // Color Blue
+    glVertex3f(-1.0f, 1.0f, 1.0f);    // Top Right Of The Quad (Left)
+    glVertex3f(-1.0f, 1.0f,-1.0f);    // Top Left Of The Quad (Left)
+    glVertex3f(-1.0f,-1.0f,-1.0f);    // Bottom Left Of The Quad (Left)
+    glVertex3f(-1.0f,-1.0f, 1.0f);    // Bottom Right Of The Quad (Left)
+
+    glColor3f(1.0f,0.0f,0.0f);    // Color Violet
+    glVertex3f( 1.0f, 1.0f,-1.0f);    // Top Right Of The Quad (Right)
+    glVertex3f( 1.0f, 1.0f, 1.0f);    // Top Left Of The Quad (Right)
+    glVertex3f( 1.0f,-1.0f, 1.0f);    // Bottom Left Of The Quad (Right)
+    glVertex3f( 1.0f,-1.0f,-1.0f);    // Bottom Right Of The Quad (Right)
+
+    glEnd();
+}
+
+void circle()
+{
+//far circle
+    glBegin(GL_POLYGON);
+    glColor3d(0,.1,1);
+
+    for(int i=0; i<=360; i=i+5)
+    {
+        float x=0,y=0;
+        x = 1.2 * cos(((-3.1416)*i)/180);
+        y = 1.2 * sin(((-3.1416)*i)/180);
+        glVertex3f(x,y,0.6);
+    }
+    glEnd();
+
+    glBegin(GL_POLYGON);
+    glColor3d(0,.1,1);
+
+    for(int i=0; i<=360; i=i+5)
+    {
+        float x=0,y=0;
+        x = 1.2 * cos(((3.1416)*i)/180);
+        y = 1.2 * sin(((3.1416)*i)/180);
+        glVertex3f(x,y,0.7);
+    }
+    glEnd();
+
+
+}
+
+static void frontCircle()
+{
+    //front circle
+    glBegin(GL_POLYGON);
+    glColor3d(0, 0, 0);
+
+    for(int i=0; i<=360; i=i+5)
+    {
+        float x=0,y=0;
+        x = .5 * cos(((-3.1416)*i)/180);
+        y = .5 * sin(((-3.1416)*i)/180);
+        glVertex3f(x,y,.8);
+    }
+
+    glEnd();
+
+    glBegin(GL_POLYGON);
+    glColor3d(0, 0, 0);
+
+    for(int i=0; i<=360; i=i+5)
+    {
+        float x=0,y=0;
+        x = .5 * cos(((3.1416)*i)/180);
+        y = .5 * sin(((3.1416)*i)/180);
+        glVertex3f(x,y,.9);
+    }
+
+    glEnd();
+}
+
+float angle=50.0;
+static void rod(GLdouble scaley, GLdouble rot_angle, GLdouble rot_x, GLdouble rot_y, GLdouble rot_z)
+{
+    glPushMatrix();
+    glRotated(rot_angle, rot_x, rot_y, rot_z);
+    glRotated(angle, 0, 1, 0);
+    glScaled(0.25, scaley, 0.3);
+    glTranslated(0, 1, 0);
+    cube();
+    glPopMatrix();
+}
+static void stand()
+{
+    // legs
+    //glColor3f(1, 0, 0);
+    rod(-12, 15, 1, 0, 1);
+    rod(-12, -15, 1, 0, 1);
+    rod(-12, 15, 1, 0, -1);
+    rod(-12, -15, 1, 0, -1);
+    // top
+    rod(0.7, 0, 0, 1, 0);
+    rod(0.7, 90, 1, 0, 0);
+
+}
+float ze=5;
+
+void fan (double r, double g, double b)
+{
+    glBegin(GL_POLYGON);
+
+    glColor3d(r, g, b);
+    glVertex3d(0, 1, 0);
+    glVertex3d(0, -1, 0);
+    glVertex3d(5, -1, 0);
+    glVertex3d(6, 0, 0);
+    glVertex3d(5, 1, 0);
+
+    glEnd();
+
+    glBegin(GL_POLYGON);
+
+    glColor3d(r, g, b);
+    glVertex3d(5, 1, 0);
+    glVertex3d(6, 0, 0);
+    glVertex3d(5, -1, 0);
+    glVertex3d(0, -1, 0);
+    glVertex3d(0, 1, 0);
+
+    glEnd();
+
+}
+
+
+
+static void windmill()
+{
+    glPushMatrix();
+    glTranslated(20,0,0);
+    //set_material(floor_wall_mat_color,floor_wall_spec,floor_wall_shininess);
+    stand();
+    glPushMatrix();
+    glTranslated(-.1,.1,-5.5+ze);
+    glScaled(2.0,2.0,2.3); //circle
+    circle();
+    glPopMatrix();
+
+    glPushMatrix();
+    glTranslated(-.1,-0.06,-5.3+ze);
+    glScaled(3.4,3.4,2.5); //circle
+    frontCircle();
+    glPopMatrix();
+
+    //continuos rotation
+    const double t = glutGet(GLUT_ELAPSED_TIME) / 1000.0;
+    //fan
+    glPushMatrix();
+    glTranslated(0,0,1.8);
+    glRotated(0+t*90, 0, 0, 1);
+    glScaled(1.8, 1, 1);
+
+    fan(1, 1, 0);
+    glScaled(1./2, 1, 1);
+    glRotated(120, 0, 0, 1);
+    glScaled(1.8, 1, 1);
+    fan(1, 0, 1);
+    glScaled(1./2, 1, 1);
+    glRotated(120, 0, 0, 1);
+    glScaled(1.8, 1, 1);
+    fan(0, 1, 1);
+    glScaled(1./2, 1, 1);
+    glRotated(-240, 0, 0, 1);
+    glPopMatrix();
+
+    //
+    glPushMatrix();//lowerBarfront
+    glColor3d(0,0,1);
+    glTranslated(-0.03,-23.1,-0.85+ze);
+    glRotated(90,0,0,1); //plate1
+    glScaled(.3,4.5,.3);
+    cube();
+    glPopMatrix();
+
+    glPushMatrix();//lowerBarfront
+    glColor3d(0,0,1);
+    glTranslated(-0.03,-23.1,-9.4+ze);
+    glRotated(90,0,0,1); //plate1
+    glScaled(.3,4.5,.3);
+    cube();
+    glPopMatrix();
+
+    glPushMatrix();//lowerBarLeft
+    glColor3d(0,0,1);
+    glTranslated(-4.6,-23.1,-5.0+ze);
+    glRotated(90,0,0,1); //plate1
+    glRotated(90,1,0,0);
+    glScaled(.3,4.5,.3);
+    cube();
+    glPopMatrix();
+
+    glPushMatrix();//lowerBarRight
+    glColor3d(0,0,1);
+    glTranslated(4.6,-23.1,-5.0+ze);
+    glRotated(90,0,0,1); //plate1
+    glRotated(90,1,0,0);
+    glScaled(.3,4.5,.3);
+    cube();
+    glPopMatrix();
+
+    glPushMatrix();//UpperBarfront
+    glColor3d(0,0,1);
+    glTranslated(0.25,-14.1,-2.2+ze);
+    glRotated(90,0,0,1); //plate1
+    glScaled(.3,2.5,.3);
+    cube();
+    glPopMatrix();
+
+    glPushMatrix();//UpperBarback
+    glColor3d(0,0,1);
+    glTranslated(0.25,-14.1,-7.80+ze);
+    glRotated(90,0,0,1); //plate1
+    glScaled(.3,2.5,.3);
+    cube();
+    glPopMatrix();
+
+    glPushMatrix();//UpperBarleft
+    glColor3d(0,0,1);
+    glTranslated(-2.8,-14.1,-5.0+ze);
+    glRotated(90,0,0,1); //plate1
+    glRotated(90,1,0,0);
+    glScaled(.3,2.5,.3);
+    cube();
+    glPopMatrix();
+
+    glPushMatrix();//UpperBarRight
+    glColor3d(0,0,1);
+    glTranslated(2.8,-14.1,-5.0+ze);
+    glRotated(90,0,0,1); //plate1
+    glRotated(90,1,0,0);
+    glScaled(.3,2.5,.3);
+    cube();
+    glPopMatrix();
+    glPopMatrix();
+}
+
+
+int start = 0;
+int end = 360;
+float roll = 0,pitch = 0,yaw = 0;
+
+
+
+GLdouble xEye = 0;
+GLdouble yEye = 0;
+GLdouble zEye = 5;
+
+GLdouble xCenter = 0;
+GLdouble yCenter = 0;
+GLdouble zCenter = -3;
+
+GLdouble xUP = 0;
+GLdouble yUP = 1;
+GLdouble zUP = 0;
+
+GLdouble x_scale = 0.4;
+GLdouble y_scale = 0.5;
+GLdouble z_scale = 0.3;
+
+GLdouble x_trans = -2;
+GLdouble y_trans = 0;
+GLdouble z_trans = -6;
+
+GLfloat x_angle = 0;
+GLfloat y_angle = -10;
+GLfloat z_angle = 0;
+
+
+GLdouble xx_scale = 18;
+GLdouble yy_scale = 0.4;
+GLdouble zz_scale = 4;
+
+GLdouble xx_trans = -6;
+GLdouble yy_trans = 2.8;
+GLdouble zz_trans = -23;
+
+GLfloat xx_angle = 5;
+GLfloat yy_angle = -20;
+GLfloat zz_angle = 0;
+
+
+
+static void table()
+{
+    set_material(jack_mat_color, jack_mat_spec, jack_mat_shininess);
+    glPushMatrix();
+    glTranslated(10,-2,0);
+    //tablePlane
+    glPushMatrix();
+    glBindTexture(GL_TEXTURE_2D,4);
+    glEnable(GL_TEXTURE_2D);
+    glTranslated(1,0,-6);
+    glPushMatrix();
+    glColor3d(0,0,1);
+    glTranslated(-2.5,-25.3,-5.0+ze);
+    glScaled(19,0.6,19);
+    cube();
+    glPopMatrix();
+    //tableLeg
+    glPushMatrix();//
+    glColor3d(0,0,1);
+    glTranslated(7.6,-33.1,-14.0+ze);
+    glScaled(0.8,8.0,0.8);
+    cube();
+    glPopMatrix();
+
+    glPushMatrix();//
+    glColor3d(0,0,1);
+    glTranslated(7.6,-33.1,3.0+ze);
+    glScaled(0.8,8.0,0.8);
+    cube();
+    glPopMatrix();
+
+    glPushMatrix();//
+    glColor3d(0,0,1);
+    glTranslated(-14.6,-33.1,-14.0+ze);
+    glScaled(0.8,8.0,0.8);
+    cube();
+    glPopMatrix();
+
+    glPushMatrix();//leg
+    glColor3d(0,0,1);
+    glTranslated(-14.6,-33.1,3.0+ze);
+    glScaled(0.8,8.0,0.8);
+    cube();
+    glPopMatrix();
+    glDisable(GL_TEXTURE_2D);
+    glPopMatrix();
+    glPopMatrix();
+}
+
+static void wall()
+{
+    glPushMatrix();
+    glBindTexture(GL_TEXTURE_2D,2);
+    glEnable(GL_TEXTURE_2D);
+    glTranslated(-11.5,-2,-22);
+    glRotated(-90,0,1,0);   ///side left
+    glScaled(25,15,0.5);
+    set_material(side_wall_mat_color, side_wall_spec, side_wall_shininess);
+    glutSolidCube(1);
+    glDisable(GL_TEXTURE_2D);
+    glPopMatrix();
+
+    glPushMatrix();
+    glBindTexture(GL_TEXTURE_2D,2);
+    glEnable(GL_TEXTURE_2D);
+    glTranslated(-7,-2,-34);
+    glScaled(10,15,0.5);     /// background wall
+    glutSolidCube(1);
+    glDisable(GL_TEXTURE_2D);
+    glPopMatrix();
+
+    glPushMatrix();
+    glBindTexture(GL_TEXTURE_2D,2);
+    glEnable(GL_TEXTURE_2D);
+    glTranslated(11,-2,-34);
+    glScaled(10,15,0.5);     /// background wall2
+    glutSolidCube(1);
+    glDisable(GL_TEXTURE_2D);
+    glPopMatrix();
+
+    glPushMatrix();
+    glBindTexture(GL_TEXTURE_2D,2);
+    glEnable(GL_TEXTURE_2D);
+    glTranslated(2,-5,-34);
+    glScaled(8,9.5,0.5);     /// background wall3
+    glutSolidCube(1);
+    glDisable(GL_TEXTURE_2D);
+    glPopMatrix();
+
+    glPushMatrix();
+    glBindTexture(GL_TEXTURE_2D,2);
+    glEnable(GL_TEXTURE_2D);
+    glTranslated(2,4.49,-34);
+    glScaled(8,2,0.5);     /// background wall4
+    glutSolidCube(1);
+    glDisable(GL_TEXTURE_2D);
+    glPopMatrix();
+
+    glPushMatrix();
+    glBindTexture(GL_TEXTURE_2D,3);
+    glEnable(GL_TEXTURE_2D);
+    glTranslated(2.0,-9.5,-22.4);
+    glRotated(90,1,0,0);
+    glScaled(28,23,0.5);     /// floor wall
+    set_material(floor_wall_mat_color,floor_wall_spec,floor_wall_shininess);
+    glutSolidCube(1);
+    glDisable(GL_TEXTURE_2D);
+    glPopMatrix();
+
+    //backView
+    //set_material(jack_mat_color, jack_mat_spec, jack_mat_shininess);
+    set_material(side_wall_mat_color, side_wall_spec, side_wall_shininess);
+    glPushMatrix();
+    glBindTexture(GL_TEXTURE_2D,5);
+    glEnable(GL_TEXTURE_2D);
+    glTranslated(1.2,-2.2,-60);
+    glScaled(25,15,0.5);     /// background
+    glutSolidCube(1);
+    glDisable(GL_TEXTURE_2D);
+    glPopMatrix();
+
+}
+static void display(void)
+{
+    set_lights();
+
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glColor3d(1,0,0);
+
+    glLoadIdentity ();
+    gluLookAt(xEye,yEye,zEye,xCenter,yCenter,zCenter,xUP,yUP,zUP);
+    ///gluLookAt(1, 0, 0, 0, 0,-1, 0, 1, 0);
+    glTranslated(x_trans, y_trans, z_trans);
+    glScaled(x_scale,y_scale,z_scale);
+    //glScaled(x_scale+0.3,y_scale+0.3,z_scale+0.3);
+    glRotated(x_angle, 1, 0, 0);
+    glRotated(y_angle, 0, 1, 0);
+    glRotated(z_angle, 0, 0, 1);
+    glPushMatrix();
+
+    glPushMatrix();
+    glTranslated(5.5, 1.37, -22);
+    glScaled(0.25,0.25,0.25);
+    windmill();
+    glPopMatrix();
+
+    glPushMatrix();
+    glTranslated(5, 3.5, -20);
+    glScaled(0.3,0.3,0.3);
+    table();
+    glPopMatrix();
+
+    glPushMatrix();
+    glTranslated(0,0,0);
+    wall();
+    glPopMatrix();
+
+    glPushMatrix();
+    glScaled(0.15,0.15,0.15);
+    glTranslated(38, -29.5, -120);
+    jack();
+    glPopMatrix();
+
+    glPushMatrix();
+    glTranslated(-11,1.5,-22);
+    glRotated(90,0,1,0);
+    glScaled(4,4,4);
+    gasket(2);
+    glPopMatrix();
+
+    glPopMatrix();
+
+    glutSwapBuffers();
+    glutPostRedisplay();
+}
+
+static void resize(int width, int height)
+{
+    const float ar = (float) width / (float) height;
+    glViewport(0, 0, width, height);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glFrustum(-ar, ar, -1.0, 1.0, 2.0, 100.0);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity() ;
+}
+
+
+void reshape (int w, int h)
+{
+    glViewport (0, 0, (GLsizei) w, (GLsizei) h);
+    glMatrixMode (GL_PROJECTION);
+    glLoadIdentity ();
+    glFrustum (-1.0, 1.0, -1.0, 1.0, 1.5, 100.0);
+    glMatrixMode (GL_MODELVIEW);
+}
+void keyboard(unsigned char key, int x, int y)
+{
+    switch (key)
+    {
+
+    //FOR DISPLAY
+    case 'd':
+        cout<<"Roll--> "<<"r & t"<<endl;
+        cout<<"Pitch--> "<<"w & s"<<endl;
+        cout<<"Yaw--> "<<"q & e"<<endl;
+        break;
+
+    //Rotate wrp axis
+    case 'x':
+        x_angle+= 5;
+        cout<<x_angle<<" "<<y_angle<<" "<<z_angle<<endl;
+        break;
+    case 'X':
+        x_angle -= 5;
+        cout<<x_angle<<" "<<y_angle<<" "<<z_angle<<endl;
+        break;
+    case 'y':
+        y_angle += 5;
+        cout<<x_angle<<" "<<y_angle<<" "<<z_angle<<endl;
+        break;
+    case 'Y':
+        y_angle -= 5;
+        cout<<x_angle<<" "<<y_angle<<" "<<z_angle<<endl;
+        break;
+    case 'z':
+        z_angle += 5;
+        cout<<x_angle<<" "<<y_angle<<" "<<z_angle<<endl;
+        break;
+    case 'Z':
+        z_angle -= 5;
+        cout<<x_angle<<" "<<y_angle<<" "<<z_angle<<endl;
+        break;
+    //////
+    // scale change
+    //Zoom
+    case '+':
+        z_trans += 1;
+        break;
+    case '-':
+        z_trans -= 1;
+        break;
+
+
+
+
+
+    ///roll pitch yaw code starts
+
+    ///camera circular movement
+
+    case 'c':
+        xEye = 5 * cos(angle);
+        zEye = 5 * sin(angle);
+        zEye = zEye-5;
+        angle -= 0.2;
+        break;
+    case 'C':
+        xEye = 5 * cos(angle);
+        zEye = 5 * sin(angle);
+        zEye = zEye-5;
+        angle += 0.2;
+        break;
+
+    /// roll starts
+
+    case 'r':
+
+        roll += 3;
+        xUP = cos((roll*PI)/180);
+        yUP = sin((roll*PI)/180);
+        printf("%f\n",roll);
+        if (roll > end)
+        {
+            roll= start;
+        }
+        break;
+    case 'R':
+
+        roll -= 3;
+        xUP = cos((roll*PI)/180);
+        yUP = sin((roll*PI)/180);
+        printf("%f\n",roll);
+        if (roll < start)
+        {
+            roll= end;
+        }
+        break;
+
+    case 'q':
+        pitch += 4;
+        yaw += 4;
+        xCenter = (pitch*PI)/180;
+        //cy = sin((pitch*3.1416)/180);
+        //cz = cos((pitch*3.1416)/180) * sin((yaw*3.1416)/180);
+        break;
+    case 'e':
+        pitch -= 4;
+        yaw -= 4;
+        xCenter = (pitch*PI)/180;
+        //cy = sin((pitch*3.1416)/180);
+        //cz = cos((pitch*3.1416)/180) * sin((yaw*3.1416)/180);
+        break;
+
+
+    case 'w':
+        pitch += 4;
+        yaw += 4;
+        //cx = sin((yaw*3.1416)/180);
+        yCenter = (pitch*PI)/180;
+        //cz = cos((yaw*3.1416)/180);
+        break;
+
+    case 's':
+        pitch -= 4;
+        yaw -= 4;
+        //cx = sin((yaw*3.1416)/180);
+        yCenter = (pitch*PI)/180;
+        //cz = cos((yaw*3.1416)/180);
+        break;
+    ///pitch ends
+
+    ///roll pitch yaw code ends
+
+
+
+
+    case '1':
+        glEnable(GL_LIGHT0);
+        break;
+    case '0':
+        glDisable(GL_LIGHT0);
+        break;
+
+    case 'l':
+        glEnable(GL_LIGHT1);
+        break;
+    case 'L':
+        glDisable(GL_LIGHT1);
+        break;
+    }
+}
+static void idle(void)
+{
+    glutPostRedisplay();
+}
+void Init()
+{
+    pix[0].makeCheckImage();
+    pix[0].setTexture(1);
+
+    pix[1].readBMPFile("G:\\4th Year 2nd Term\\CSE 4208 (Computer Graphics Laboratory)\\Lab_04\\lab4 texturing\\download.bmp");
+    pix[1].setTexture(2);
+
+    pix[2].readBMPFile("G:\\4th Year 2nd Term\\CSE 4208 (Computer Graphics Laboratory)\\Lab_04\\lab4 texturing\\floor1.bmp");
+    pix[2].setTexture(3);
+
+    pix[3].readBMPFile("G:\\4th Year 2nd Term\\CSE 4208 (Computer Graphics Laboratory)\\Lab_04\\lab4 texturing\\table.bmp");
+    pix[3].setTexture(4);
+
+    pix[4].readBMPFile("G:\\4th Year 2nd Term\\CSE 4208 (Computer Graphics Laboratory)\\Lab_04\\lab4 texturing\\sr5.bmp");
+    pix[4].setTexture(5);
+
+}
+
+int main(int argc, char *argv[])
+{
+    glutInit(&argc, argv);
+    glutInitWindowSize(840,780);
+    glutInitWindowPosition(10,10);
+    glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH);
+
+    glutCreateWindow("GLUT Shapes");
+
+    glutReshapeFunc(reshape);
+    glutDisplayFunc(display);
+    glutKeyboardFunc(keyboard);
+    glutIdleFunc(idle);
+
+    glClearColor(1,1,1,1);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+
+
+
+    glEnable(GL_LIGHTING);
+    glEnable(GL_NORMALIZE);
+
+    glEnable(GL_LIGHT0);
+    glLightModeli(GL_LIGHT_MODEL_LOCAL_VIEWER, GL_TRUE); //3 line of up
+    Init();
+
+    glutMainLoop();
+
+    return EXIT_SUCCESS;
+}
